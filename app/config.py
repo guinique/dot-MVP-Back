@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     embed_api_key: str = ""
     llm_provider: str = "groq"
     groq_api_key: str = ""
-    groq_model: str = "llama-3.1-8b-instant"
+    groq_model: str = "llama-3.3-70b-versatile"
     chat_history_limit: int = 20
 
     @property

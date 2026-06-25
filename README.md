@@ -33,7 +33,7 @@ d) **Documentação:** README com como subir localmente, variáveis de ambiente,
 - **Framework:** FastAPI — async-ready, OpenAPI automático, integração nativa com Pydantic
 - **ORM:** SQLAlchemy 2.x — flexível para SQLite (dev) e PostgreSQL (prod)
 - **Auth:** JWT com `python-jose` + bcrypt — stateless, adequado para API REST e iframe embed
-- **Agente de IA:** LangChain com tools + Groq (tier gratuito, modelo `llama-3.1-8b-instant`)
+- **Agente de IA:** LangChain com tools + Groq (tier gratuito, modelo `llama-3.3-70b-versatile`)
 - **Estratégia de conhecimento:** agente decide quando buscar fontes via HTTP (sem vector DB/embeddings)
 
 ### Autenticação

@@ -1,10 +1,8 @@
 import logging
 from typing import Any
 
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.tools import tool
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.tools import BaseTool, tool
 from langchain_groq import ChatGroq
 
 from app.config import get_settings
@@ -14,8 +12,11 @@ from app.services.knowledge import fetch_source_content
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+MAX_TOOL_ITERATIONS = 4
+MAX_SOURCE_CHARS_FALLBACK = 3000
 
-def _build_tools(source_urls: list[str]):
+
+def _build_tools(source_urls: list[str]) -> list[BaseTool]:
     urls = list(source_urls)
 
     @tool
@@ -54,6 +55,95 @@ def _mock_reply(tutor: Tutor, user_message: str) -> str:
     )
 
 
+def _build_system_message(tutor: Tutor) -> SystemMessage:
+    return SystemMessage(
+        content=(
+            "You are a personalized tutor. Follow the behavior instructions.\n"
+            "You have tools to list and fetch configured knowledge sources. "
+            "Use them when the user asks about topics that may be covered by those sources. "
+            "Do not invent facts when sources are available.\n\n"
+            f"Tutor instructions:\n{tutor.system_instructions}"
+        )
+    )
+
+
+def _build_source_context(source_urls: list[str]) -> str:
+    if not source_urls:
+        return ""
+
+    blocks: list[str] = []
+    for url in source_urls[:3]:
+        content = fetch_source_content(url, max_chars=MAX_SOURCE_CHARS_FALLBACK)
+        blocks.append(f"--- {url} ---\n{content}")
+
+    return "\n\nReference material from configured sources:\n" + "\n\n".join(blocks)
+
+
+def _direct_reply_with_sources(
+    llm: ChatGroq,
+    tutor: Tutor,
+    history: list[ChatMessage],
+    user_message: str,
+) -> str:
+    source_context = _build_source_context(tutor.source_urls or [])
+    system_content = (
+        "You are a personalized tutor. Follow the behavior instructions.\n"
+        "Answer using the reference material below when relevant. "
+        "Do not invent facts beyond what is provided.\n\n"
+        f"Tutor instructions:\n{tutor.system_instructions}"
+        f"{source_context}"
+    )
+    messages: list[Any] = [SystemMessage(content=system_content)]
+    messages.extend(_history_to_messages(history))
+    messages.append(HumanMessage(content=user_message))
+
+    response = llm.invoke(messages)
+    content = getattr(response, "content", str(response))
+    return str(content).strip() or "I could not generate a response."
+
+
+def _run_tool_loop(
+    llm: ChatGroq,
+    tools: list[BaseTool],
+    tutor: Tutor,
+    history: list[ChatMessage],
+    user_message: str,
+) -> str:
+    tools_by_name = {tool_item.name: tool_item for tool_item in tools}
+    llm_with_tools = llm.bind_tools(tools)
+
+    messages: list[Any] = [_build_system_message(tutor)]
+    messages.extend(_history_to_messages(history))
+    messages.append(HumanMessage(content=user_message))
+
+    for _ in range(MAX_TOOL_ITERATIONS):
+        ai_msg = llm_with_tools.invoke(messages)
+        if not getattr(ai_msg, "tool_calls", None):
+            content = getattr(ai_msg, "content", "")
+            if str(content).strip():
+                return str(content).strip()
+
+        messages.append(ai_msg)
+        for tool_call in ai_msg.tool_calls:
+            tool_name = tool_call["name"]
+            tool_args = tool_call.get("args") or {}
+            selected = tools_by_name.get(tool_name)
+            if selected is None:
+                output = f"Unknown tool: {tool_name}"
+            else:
+                output = selected.invoke(tool_args)
+            messages.append(
+                ToolMessage(
+                    content=str(output),
+                    tool_call_id=tool_call["id"],
+                )
+            )
+
+    final = llm.invoke(messages)
+    content = getattr(final, "content", str(final))
+    return str(content).strip() or "I could not generate a response."
+
+
 def generate_tutor_reply(tutor: Tutor, history: list[ChatMessage], user_message: str) -> str:
     if settings.llm_provider == "mock":
         return _mock_reply(tutor, user_message)
@@ -67,35 +157,15 @@ def generate_tutor_reply(tutor: Tutor, history: list[ChatMessage], user_message:
         api_key=settings.groq_api_key,
         model=settings.groq_model,
         temperature=0.2,
+        streaming=False,
     )
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "You are a personalized tutor. Follow the behavior instructions.\n"
-                "Use tools to inspect knowledge sources when needed. "
-                "Do not invent facts when sources are available.\n\n"
-                "Tutor instructions:\n{instructions}",
-            ),
-            MessagesPlaceholder("chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder("agent_scratchpad"),
-        ]
-    )
-
-    agent = create_tool_calling_agent(llm, tools, prompt)
-    executor = AgentExecutor(agent=agent, tools=tools, verbose=False, max_iterations=4)
 
     try:
-        result = executor.invoke(
-            {
-                "instructions": tutor.system_instructions,
-                "input": user_message,
-                "chat_history": _history_to_messages(history),
-            }
-        )
-        return str(result.get("output", "")).strip() or "I could not generate a response."
+        return _run_tool_loop(llm, tools, tutor, history, user_message)
     except Exception as exc:
-        logger.exception("Agent execution failed: %s", exc)
-        return "Sorry, I had trouble generating a response. Please try again."
+        logger.warning("Tool-calling agent failed, using direct reply fallback: %s", exc)
+        try:
+            return _direct_reply_with_sources(llm, tutor, history, user_message)
+        except Exception as fallback_exc:
+            logger.exception("Direct reply fallback failed: %s", fallback_exc)
+            return "Sorry, I had trouble generating a response. Please try again."

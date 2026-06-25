@@ -134,12 +134,14 @@ Para inspecionar cada conversa do agente (prompts, tools chamadas, latência, er
 3. No `.env`:
 
 ```env
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=lsv2_pt_...
-LANGCHAIN_PROJECT=dot-mvp
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=lsv2_pt_...
+LANGSMITH_PROJECT=dot-mvp
 ```
 
-4. Reinicie o backend e converse no embed — os traces aparecem no dashboard LangSmith
+4. Reinicie o backend e converse no embed — os traces aparecem em **Tracing** no [LangSmith](https://smith.langchain.com)
+
+Conforme a [documentação oficial](https://docs.langchain.com/langsmith/trace-with-langchain), nenhum código extra é necessário no LangChain — os `invoke()` do agente são rastreados automaticamente.
 
 Cada run inclui tags `tutor:{id}` e metadata `session_key` para filtrar conversas.
 

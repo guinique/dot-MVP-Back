@@ -30,7 +30,10 @@ class Tutor(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    sessions: Mapped[list["ChatSession"]] = relationship(back_populates="tutor")
+    sessions: Mapped[list["ChatSession"]] = relationship(
+        back_populates="tutor",
+        cascade="all, delete-orphan",
+    )
 
 
 class ChatSession(Base):
@@ -45,7 +48,9 @@ class ChatSession(Base):
 
     tutor: Mapped["Tutor"] = relationship(back_populates="sessions")
     messages: Mapped[list["ChatMessage"]] = relationship(
-        back_populates="session", order_by="ChatMessage.created_at"
+        back_populates="session",
+        order_by="ChatMessage.created_at",
+        cascade="all, delete-orphan",
     )
 
 

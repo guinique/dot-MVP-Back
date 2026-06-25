@@ -48,3 +48,19 @@ def test_delete_tutor(client, admin_headers, sample_tutor):
 
     get_resp = client.get(f"/api/v1/tutors/{tutor_id}", headers=admin_headers)
     assert get_resp.status_code == 404
+
+
+def test_delete_tutor_with_chat_history(client, admin_headers, embed_headers, sample_tutor, db):
+    from app.models.tutor import ChatMessage, ChatSession
+
+    client.post(
+        f"/api/v1/chat/tutors/{sample_tutor.id}/messages",
+        headers=embed_headers,
+        json={"message": "Hello"},
+    )
+
+    response = client.delete(f"/api/v1/tutors/{sample_tutor.id}", headers=admin_headers)
+    assert response.status_code == 204
+
+    assert db.query(ChatMessage).count() == 0
+    assert db.query(ChatSession).count() == 0

@@ -116,6 +116,7 @@ Requer header `X-Embed-Token` com valor de `EMBED_API_KEY`.
 |--------|------|-----------|
 | POST | `/api/v1/chat/sessions` | Criar sessão de conversa |
 | POST | `/api/v1/chat/tutors/{id}/messages` | Enviar mensagem e receber resposta do agente |
+| GET | `/api/v1/chat/tutors/{id}/sessions/{session_key}/messages` | Histórico da sessão (últimas N mensagens) |
 
 ### Agente de IA (Groq — gratuito)
 

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -21,3 +23,15 @@ class ChatMessageResponse(BaseModel):
     session_key: str
     reply: str
     role: str = "assistant"
+
+
+class ChatHistoryMessage(BaseModel):
+    role: str
+    content: str
+    created_at: datetime
+
+
+class ChatHistoryResponse(BaseModel):
+    session_id: int
+    session_key: str
+    messages: list[ChatHistoryMessage]

@@ -59,3 +59,39 @@ def test_chat_inactive_tutor_returns_404(client, embed_headers, admin_headers, s
         json={"message": "Hello"},
     )
     assert response.status_code == 404
+
+
+def test_get_session_messages(client, embed_headers, sample_tutor):
+    post = client.post(
+        f"/api/v1/chat/tutors/{sample_tutor.id}/messages",
+        headers=embed_headers,
+        json={"message": "Hello there"},
+    )
+    session_key = post.json()["session_key"]
+
+    response = client.get(
+        f"/api/v1/chat/tutors/{sample_tutor.id}/sessions/{session_key}/messages",
+        headers=embed_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["session_key"] == session_key
+    assert len(data["messages"]) == 2
+    assert data["messages"][0]["role"] == "user"
+    assert data["messages"][0]["content"] == "Hello there"
+    assert data["messages"][1]["role"] == "assistant"
+
+
+def test_get_session_messages_not_found(client, embed_headers, sample_tutor):
+    response = client.get(
+        f"/api/v1/chat/tutors/{sample_tutor.id}/sessions/invalid-key/messages",
+        headers=embed_headers,
+    )
+    assert response.status_code == 404
+
+
+def test_get_session_messages_requires_embed_token(client, sample_tutor):
+    response = client.get(
+        f"/api/v1/chat/tutors/{sample_tutor.id}/sessions/any-key/messages",
+    )
+    assert response.status_code == 401

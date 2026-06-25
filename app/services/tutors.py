@@ -82,10 +82,26 @@ def get_recent_messages(db: Session, session_id: int, limit: int) -> list[ChatMe
     return (
         db.query(ChatMessage)
         .filter(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at.desc())
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(limit)
         .all()[::-1]
     )
+
+
+def get_session_history(
+    db: Session,
+    tutor: Tutor,
+    session_key: str,
+    limit: int,
+) -> tuple[ChatSession, list[ChatMessage]] | None:
+    session = (
+        db.query(ChatSession)
+        .filter(ChatSession.session_key == session_key, ChatSession.tutor_id == tutor.id)
+        .first()
+    )
+    if not session:
+        return None
+    return session, get_recent_messages(db, session.id, limit)
 
 
 def chat_with_tutor(

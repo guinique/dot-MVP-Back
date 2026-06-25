@@ -7,7 +7,14 @@ from app.config import get_settings
 from app.database import get_db
 from app.dependencies.embed import verify_embed_token
 from app.models.tutor import TutorStatus
-from app.schemas.chat import ChatMessageRequest, ChatMessageResponse, ChatSessionCreate, ChatSessionResponse
+from app.schemas.chat import (
+    ChatHistoryMessage,
+    ChatHistoryResponse,
+    ChatMessageRequest,
+    ChatMessageResponse,
+    ChatSessionCreate,
+    ChatSessionResponse,
+)
 from app.services import tutors as tutors_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -44,3 +51,38 @@ def send_message(
         db, tutor, payload, history_limit=settings.chat_history_limit
     )
     return ChatMessageResponse(session_id=session.id, session_key=session.session_key, reply=reply)
+
+
+@router.get(
+    "/tutors/{tutor_id}/sessions/{session_key}/messages",
+    response_model=ChatHistoryResponse,
+)
+def get_session_messages(
+    tutor_id: int,
+    session_key: str,
+    db: Annotated[Session, Depends(get_db)],
+    _: Annotated[None, Depends(verify_embed_token)],
+) -> ChatHistoryResponse:
+    tutor = tutors_service.get_tutor(db, tutor_id)
+    if not tutor or tutor.status != TutorStatus.ACTIVE:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Active tutor not found")
+
+    result = tutors_service.get_session_history(
+        db, tutor, session_key, limit=settings.chat_history_limit
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
+    session, messages = result
+    return ChatHistoryResponse(
+        session_id=session.id,
+        session_key=session.session_key,
+        messages=[
+            ChatHistoryMessage(
+                role=message.role.value,
+                content=message.content,
+                created_at=message.created_at,
+            )
+            for message in messages
+        ],
+    )

@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
     chat_history_limit: int = 20
+    langchain_tracing_v2: bool = False
+    langchain_api_key: str = ""
+    langchain_project: str = "dot-mvp"
+    langchain_endpoint: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -26,4 +30,8 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    from app.observability import configure_langsmith
+
+    settings = Settings()
+    configure_langsmith(settings)
+    return settings

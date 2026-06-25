@@ -103,7 +103,12 @@ def chat_with_tutor(
     db.add(user_message)
     db.commit()
 
-    reply = generate_tutor_reply(tutor=tutor, history=history, user_message=payload.message)
+    reply = generate_tutor_reply(
+        tutor=tutor,
+        history=history,
+        user_message=payload.message,
+        session_key=session.session_key,
+    )
 
     assistant_message = ChatMessage(
         session_id=session.id, role=MessageRole.ASSISTANT, content=reply

@@ -125,6 +125,24 @@ Requer header `X-Embed-Token` com valor de `EMBED_API_KEY`.
 
 O agente usa ferramentas LangChain para listar e buscar conteúdo das fontes configuradas no tutor.
 
+### Observabilidade (LangSmith — opcional)
+
+Para inspecionar cada conversa do agente (prompts, tools chamadas, latência, erros):
+
+1. Crie conta em [smith.langchain.com](https://smith.langchain.com)
+2. Gere uma API key
+3. No `.env`:
+
+```env
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=lsv2_pt_...
+LANGCHAIN_PROJECT=dot-mvp
+```
+
+4. Reinicie o backend e converse no embed — os traces aparecem no dashboard LangSmith
+
+Cada run inclui tags `tutor:{id}` e metadata `session_key` para filtrar conversas.
+
 > Este código foi produzido com auxílio de agentes de codificação (Cursor AI), conforme exigido pelo PRD.
 
 ---

@@ -16,6 +16,20 @@ MAX_TOOL_ITERATIONS = 4
 MAX_SOURCE_CHARS_FALLBACK = 3000
 
 
+def _run_config(tutor: Tutor, session_key: str | None = None) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "tutor_id": tutor.id,
+        "tutor_title": tutor.title,
+    }
+    if session_key:
+        metadata["session_key"] = session_key
+
+    return {
+        "metadata": metadata,
+        "tags": ["dot-mvp", f"tutor:{tutor.id}"],
+    }
+
+
 def _build_tools(source_urls: list[str]) -> list[BaseTool]:
     urls = list(source_urls)
 
@@ -84,6 +98,7 @@ def _direct_reply_with_sources(
     tutor: Tutor,
     history: list[ChatMessage],
     user_message: str,
+    session_key: str | None = None,
 ) -> str:
     source_context = _build_source_context(tutor.source_urls or [])
     system_content = (
@@ -97,7 +112,7 @@ def _direct_reply_with_sources(
     messages.extend(_history_to_messages(history))
     messages.append(HumanMessage(content=user_message))
 
-    response = llm.invoke(messages)
+    response = llm.invoke(messages, config=_run_config(tutor, session_key))
     content = getattr(response, "content", str(response))
     return str(content).strip() or "I could not generate a response."
 
@@ -108,6 +123,7 @@ def _run_tool_loop(
     tutor: Tutor,
     history: list[ChatMessage],
     user_message: str,
+    session_key: str | None = None,
 ) -> str:
     tools_by_name = {tool_item.name: tool_item for tool_item in tools}
     llm_with_tools = llm.bind_tools(tools)
@@ -116,8 +132,10 @@ def _run_tool_loop(
     messages.extend(_history_to_messages(history))
     messages.append(HumanMessage(content=user_message))
 
+    run_config = _run_config(tutor, session_key)
+
     for _ in range(MAX_TOOL_ITERATIONS):
-        ai_msg = llm_with_tools.invoke(messages)
+        ai_msg = llm_with_tools.invoke(messages, config=run_config)
         if not getattr(ai_msg, "tool_calls", None):
             content = getattr(ai_msg, "content", "")
             if str(content).strip():
@@ -139,12 +157,17 @@ def _run_tool_loop(
                 )
             )
 
-    final = llm.invoke(messages)
+    final = llm.invoke(messages, config=run_config)
     content = getattr(final, "content", str(final))
     return str(content).strip() or "I could not generate a response."
 
 
-def generate_tutor_reply(tutor: Tutor, history: list[ChatMessage], user_message: str) -> str:
+def generate_tutor_reply(
+    tutor: Tutor,
+    history: list[ChatMessage],
+    user_message: str,
+    session_key: str | None = None,
+) -> str:
     if settings.llm_provider == "mock":
         return _mock_reply(tutor, user_message)
 
@@ -161,11 +184,11 @@ def generate_tutor_reply(tutor: Tutor, history: list[ChatMessage], user_message:
     )
 
     try:
-        return _run_tool_loop(llm, tools, tutor, history, user_message)
+        return _run_tool_loop(llm, tools, tutor, history, user_message, session_key)
     except Exception as exc:
         logger.warning("Tool-calling agent failed, using direct reply fallback: %s", exc)
         try:
-            return _direct_reply_with_sources(llm, tutor, history, user_message)
+            return _direct_reply_with_sources(llm, tutor, history, user_message, session_key)
         except Exception as fallback_exc:
             logger.exception("Direct reply fallback failed: %s", fallback_exc)
             return "Sorry, I had trouble generating a response. Please try again."
